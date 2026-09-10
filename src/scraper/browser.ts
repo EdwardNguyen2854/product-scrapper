@@ -1,4 +1,4 @@
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core'
+import { chromium, type Browser, type BrowserContext, type Frame, type Page } from 'playwright-core'
 
 export class BrowserSession {
   private browser: Browser | null = null
@@ -43,30 +43,86 @@ export class BrowserSession {
   }
 }
 
-export async function dismissCookieBanner(page: Page): Promise<void> {
-  const candidates = [
-    page.getByRole('button', { name: /accept all/i }),
-    page.getByRole('button', { name: /accept cookies/i }),
-    page.getByRole('button', { name: /^accept$/i }),
-    page.locator('#onetrust-accept-btn-handler'),
-    page.locator('button').filter({ hasText: /allow all/i })
+async function tryConsentControls(frame: Page | Frame): Promise<boolean> {
+  const selectors = [
+    '#onetrust-accept-btn-handler',
+    '#onetrust-reject-all-handler',
+    '.onetrust-close-btn-handler',
+    '#onetrust-close-btn-container button',
+    'button[aria-label*="cookie" i][aria-label*="close" i]',
+    'button[aria-label*="privacy" i][aria-label*="close" i]'
   ]
 
-  for (const candidate of candidates) {
+  for (const selector of selectors) {
+    const candidate = frame.locator(selector).first()
     try {
-      if (await candidate.first().isVisible({ timeout: 500 })) {
-        await candidate.first().click({ timeout: 1500 })
-        return
-      }
+      if (!(await candidate.isVisible({ timeout: 80 }))) continue
+      const clicked = await candidate.click({ timeout: 900 }).then(() => true).catch(() => false)
+      if (!clicked) await candidate.click({ timeout: 900, force: true }).catch(() => undefined)
+      return true
     } catch {
-      // Try the next known cookie control.
+      // Try the next known consent control.
     }
   }
+
+  const labels = [
+    /accept all cookies/i,
+    /accept all/i,
+    /accept cookies/i,
+    /^accept$/i,
+    /allow all/i,
+    /^agree$/i,
+    /i agree/i,
+    /^continue$/i
+  ]
+  for (const label of labels) {
+    const candidate = frame.getByRole('button', { name: label }).first()
+    try {
+      if (!(await candidate.isVisible({ timeout: 80 }))) continue
+      const clicked = await candidate.click({ timeout: 900 }).then(() => true).catch(() => false)
+      if (!clicked) await candidate.click({ timeout: 900, force: true }).catch(() => undefined)
+      return true
+    } catch {
+      // Try the next wording/frame.
+    }
+  }
+  return false
 }
 
-export async function gotoStable(page: Page, url: string, timeoutMs = 45000): Promise<void> {
+async function waitForOneTrustHidden(page: Page): Promise<void> {
+  const overlay = page.locator('#onetrust-banner-sdk, #onetrust-consent-sdk .onetrust-pc-dark-filter').first()
+  await overlay.waitFor({ state: 'hidden', timeout: 1500 }).catch(() => undefined)
+}
+
+/**
+ * Dismiss common Emerson/OneTrust consent UI. The banner can be injected after
+ * DOMContentLoaded, so callers may give this helper a short polling window.
+ */
+export async function dismissCookieBanner(page: Page, waitMs = 0): Promise<boolean> {
+  const deadline = Date.now() + Math.max(0, waitMs)
+  do {
+    for (const frame of page.frames()) {
+      if (await tryConsentControls(frame)) {
+        await waitForOneTrustHidden(page)
+        await page.waitForTimeout(100).catch(() => undefined)
+        return true
+      }
+    }
+    if (Date.now() >= deadline) break
+    await page.waitForTimeout(200).catch(() => undefined)
+  } while (Date.now() <= deadline)
+  return false
+}
+
+export async function gotoStable(page: Page, url: string, timeoutMs = 45000): Promise<boolean> {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs })
-  await dismissCookieBanner(page)
+
+  // Consent UI is often injected slightly after DOMContentLoaded. Try before
+  // and after the short network-idle window so it cannot cover the paginator.
+  let cookieDismissed = await dismissCookieBanner(page, 2200)
   await page.waitForLoadState('networkidle', { timeout: 7000 }).catch(() => undefined)
-  await page.waitForTimeout(350)
+  if (!cookieDismissed) cookieDismissed = await dismissCookieBanner(page, 1800)
+  else await dismissCookieBanner(page, 0)
+  await page.waitForTimeout(250)
+  return cookieDismissed
 }

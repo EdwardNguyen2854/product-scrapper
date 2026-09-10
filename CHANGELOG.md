@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.4
+
+- Fixed Emerson cookie/consent overlays intercepting the first pagination click; delayed OneTrust/common consent controls are now polled and dismissed automatically.
+- Fixed `PQueue is not a constructor` after successful 560/560 discovery by bundling `p-queue` in the Electron worker instead of externalizing it.
+- Retained v0.2.3 non-blocking network diagnostics and verified page-number pagination.
+- No database migration; schema remains v2.
+
 ## 0.2.3
 
 - Fixed v0.2.2 discovery hanging at 0% while waiting for captured XHR/fetch response bodies.

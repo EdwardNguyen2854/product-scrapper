@@ -5,6 +5,13 @@ import { resolve } from 'node:path'
 export default defineConfig({
   main: {
     build: {
+      // electron-vite v5 externalizes package.json dependencies by default.
+      // p-queue 6.x is CommonJS and its default export can otherwise arrive in
+      // the worker as a module object, causing `PQueue is not a constructor`.
+      // Bundling it lets Vite/Rollup normalize the CJS default export.
+      externalizeDeps: {
+        exclude: ['p-queue']
+      },
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),

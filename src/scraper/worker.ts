@@ -24,7 +24,7 @@ import { compareJobs } from './comparison/compare'
 import { exportJob, exportSchema } from './export'
 
 const userData = process.env.AVENTICS_USER_DATA || join(process.cwd(), '.aventics-data')
-const appVersion = process.env.AVENTICS_APP_VERSION || '0.2.3'
+const appVersion = process.env.AVENTICS_APP_VERSION || '0.2.5'
 mkdirSync(userData, { recursive: true })
 const logger = pino(pino.destination(join(userData, 'scraper.log')))
 const db = new ScraperDatabase(userData)
@@ -72,8 +72,11 @@ async function executeJob(jobId: string, headless: boolean, retryOnly = false): 
       let job = db.getJob(jobId)
       if (!job) throw new Error('Job not found.')
       await browser.start()
+      log('info', `Mode: ${job.mode === 'full' ? 'FULL specifications' : 'LISTING only'}.`, jobId)
 
-      if (!retryOnly) {
+      // Listing-only retries/resumes re-run discovery because there are no detail
+      // scrape tasks to retry. Full-mode retries keep the existing product inventory.
+      if (!retryOnly || job.mode === 'listing') {
         controller.phase = 'discovering'
         db.setJobStatus(jobId, 'discovering'); emitJob(jobId)
         log('info', `Discovering products for ${job.seriesName}.`, jobId)
@@ -92,7 +95,7 @@ async function executeJob(jobId: string, headless: boolean, retryOnly = false): 
           if (job.runQualityValidation) {
             db.setJobStatus(jobId, 'validating'); emitJob(jobId)
             for (const p of db.listProducts(jobId)) {
-              const quality = evaluateProductQuality(p); db.saveQuality(p.id, quality); emitProduct(jobId, db.getProductById(p.id)!)
+              const quality = evaluateProductQuality(p, 'listing'); db.saveQuality(p.id, quality); emitProduct(jobId, db.getProductById(p.id)!)
             }
           }
           await finishJob(jobId)
@@ -103,6 +106,7 @@ async function executeJob(jobId: string, headless: boolean, retryOnly = false): 
       job = db.getJob(jobId)!
       controller.phase = 'scraping'
       db.setJobStatus(jobId, 'scraping'); emitJob(jobId)
+      log('info', `Starting detail scrape: ${db.countProducts(jobId)} products.`, jobId)
       const queue = new PQueue({ concurrency: job.concurrency })
       controller.setQueue(queue)
       const scrapeContext = await buildScrapeContext(browser, controller, job.timeoutMs, job.sourceUrl)
@@ -123,7 +127,7 @@ async function executeJob(jobId: string, headless: boolean, retryOnly = false): 
               specifications: result.data.specifications,
               assets: filteredAssets(job!, result.data.assets)
             }, result.sourceMethod)
-            if (job!.runQualityValidation) db.saveQuality(saved.id, evaluateProductQuality(db.getProductById(saved.id)!))
+            if (job!.runQualityValidation) db.saveQuality(saved.id, evaluateProductQuality(db.getProductById(saved.id)!, 'full'))
             const finalProduct = db.getProductById(saved.id)!
             if (job!.developerDiagnostics) log('info', `[diag] ${finalProduct.sku}: method=${result.sourceMethod}, specs=${Object.keys(finalProduct.specifications).length}, assets=${finalProduct.assets.length}, quality=${finalProduct.quality.status}/${finalProduct.quality.score}`, jobId)
             emitProduct(jobId, finalProduct)
@@ -165,7 +169,8 @@ async function finishJob(jobId: string): Promise<void> {
       const summary = compareJobs(db, jobId)
       if (summary.previousJobId) {
         emit({ type: 'comparison', jobId, summary })
-        log('info', `Comparison: +${summary.added} -${summary.removed} ~${summary.changed}, ${summary.unchanged} unchanged.`, jobId)
+        const scope = job.mode === 'listing' ? 'Listing inventory comparison' : 'Full-data comparison'
+        log('info', `${scope}: +${summary.added} -${summary.removed} ~${summary.changed}, ${summary.unchanged} unchanged.`, jobId)
       } else log('info', 'No previous completed scrape exists for comparison.', jobId)
     } catch (error) {
       log('warn', `Comparison could not be completed: ${error instanceof Error ? error.message : String(error)}`, jobId)

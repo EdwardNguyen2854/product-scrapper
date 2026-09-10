@@ -10,7 +10,7 @@ export const aventicsSeriesUrlSchema = z
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'URL must use HTTP or HTTPS.' })
       }
       if (url.hostname.toLowerCase() !== 'discreteautomation.emerson.com') {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Only discreteautomation.emerson.com is supported in v0.2.4.' })
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Only discreteautomation.emerson.com is supported in v0.2.5.' })
       }
       if (!url.pathname.toLowerCase().startsWith('/product/')) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Enter an Emerson product-series URL.' })

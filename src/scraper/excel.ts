@@ -18,7 +18,13 @@ function uniqueSpecificationNames(products: ProductRecord[]): string[] {
 }
 function applySheetBasics(sheet: ExcelJS.Worksheet): void {
   sheet.views = [{ state: 'frozen', ySplit: 1 }]
-  if (sheet.rowCount > 0) sheet.autoFilter = sheet.dimensions
+  // ExcelJS expects an AutoFilter range/ref, not Worksheet.dimensions. Passing
+  // the dimensions model can reach its range decoder with an undefined row.
+  // Limit filtering to the header row and skip it when the sheet has no columns.
+  if (sheet.rowCount > 0 && sheet.columnCount > 0) {
+    const lastColumn = sheet.getColumn(sheet.columnCount).letter
+    sheet.autoFilter = `A1:${lastColumn}1`
+  }
   const header = sheet.getRow(1); header.font = { bold: true }; header.alignment = { vertical: 'middle' }; header.height = 22
   sheet.eachRow((row) => { row.alignment = { vertical: 'top', wrapText: true } })
 }

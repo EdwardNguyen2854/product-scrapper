@@ -16,6 +16,14 @@ describe('evaluateProductQuality',()=>{
     expect(q.status).toBe('complete')
     expect(q.score).toBe(100)
   })
+  it('allows listing-only products without detail specifications',()=>{
+    const p=product({})
+    p.sourceMethod='listing'
+    p.attempts=0
+    const q=evaluateProductQuality(p,'listing')
+    expect(q.status).toBe('complete')
+    expect(q.issues.some((i)=>i.code==='NO_SPECIFICATIONS')).toBe(false)
+  })
   it('marks suspiciously sparse specifications incomplete',()=>{
     const q=evaluateProductQuality(product({A:'1'}))
     expect(q.status).toBe('incomplete')

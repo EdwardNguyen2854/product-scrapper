@@ -1,4 +1,16 @@
-# v0.2.4 Implementation Notes
+# v0.2.5 Implementation Notes
+
+
+## v0.2.5 export + mode semantics hotfix
+
+The 560/560 TM5 run showed that discovery, cookie handling, and pagination were working, but a listing-only run was being graded with full-detail quality rules and Excel export crashed while applying AutoFilter. v0.2.5 fixes both downstream problems.
+
+- Excel export applies AutoFilter only when columns exist and uses `A1:<last-column>1`.
+- `evaluateProductQuality()` now accepts scrape mode; listing mode does not require specifications, description, or assets.
+- Automatic comparison baselines must use the same scrape mode. Listing comparison is inventory-only; full mode keeps specification/asset diffs.
+- Worker logs state the selected mode and explicitly announce the start of detail scraping in full mode.
+- Listing-only retry/resume re-runs discovery and listing validation; it cannot accidentally transition into full detail scraping.
+
 
 ## v0.2.4 cookie + queue runtime hotfix
 

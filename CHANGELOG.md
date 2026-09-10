@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.5
+
+- Fixed Excel export crash `Cannot read properties of undefined (reading 'row')` by using a valid header-row AutoFilter range instead of passing `Worksheet.dimensions` to ExcelJS.
+- Listing-only quality validation no longer requires detail specifications; SKU/URL/name remain the listing completeness criteria.
+- Auto-comparison now selects a previous run with the same scrape mode. Listing comparisons are explicitly SKU-inventory-only; full runs compare specifications and assets.
+- Added explicit mode and detail-scrape transition logs so a listing-only run cannot be mistaken for a full specification scrape.
+- Listing-only retry/resume now re-runs discovery instead of accidentally entering full detail scraping.
+- Added regression tests for listing-mode quality and Excel export.
+- Database schema remains v2.
+
 ## 0.2.4
 
 - Fixed Emerson cookie/consent overlays intercepting the first pagination click; delayed OneTrust/common consent controls are now polled and dismissed automatically.

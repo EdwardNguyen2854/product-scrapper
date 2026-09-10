@@ -24,7 +24,7 @@ import { compareJobs } from './comparison/compare'
 import { exportJob, exportSchema } from './export'
 
 const userData = process.env.AVENTICS_USER_DATA || join(process.cwd(), '.aventics-data')
-const appVersion = process.env.AVENTICS_APP_VERSION || '0.2.2'
+const appVersion = process.env.AVENTICS_APP_VERSION || '0.2.3'
 mkdirSync(userData, { recursive: true })
 const logger = pino(pino.destination(join(userData, 'scraper.log')))
 const db = new ScraperDatabase(userData)

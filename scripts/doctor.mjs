@@ -1,9 +1,9 @@
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-console.log('AVENTICS Product Scraper v0.2.2 - environment check')
+console.log('AVENTICS Product Scraper v0.2.3 - environment check')
 console.log(`Platform: ${process.platform} ${process.arch}`)
 console.log(`Node: ${process.version}`)
-if (process.platform !== 'win32') console.log('WARN: v0.2.2 distribution target is Windows x64.')
+if (process.platform !== 'win32') console.log('WARN: v0.2.3 distribution target is Windows x64.')
 const roots=[process.env['PROGRAMFILES(X86)'],process.env.PROGRAMFILES,process.env.LOCALAPPDATA].filter(Boolean)
 const candidates=roots.flatMap((root)=>[join(root,'Microsoft','Edge','Application','msedge.exe'),join(root,'Microsoft','Edge Beta','Application','msedge.exe'),join(root,'Microsoft','Edge Dev','Application','msedge.exe')])
 const edge=candidates.find(existsSync)

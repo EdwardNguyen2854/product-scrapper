@@ -1,4 +1,4 @@
-# Validation status — v0.2.2 source package
+# Validation status — v0.2.3 source package
 
 ## Completed in this packaging environment
 
@@ -6,10 +6,13 @@
 - Node syntax check for `scripts/doctor.mjs` and `scripts/ensure-electron.mjs`: PASS.
 - TypeScript/TSX syntax transpilation across source and tests: PASS (34 source/test files checked, excluding `.d.ts`).
 - Product-range helper smoke checks for `1 - 10 of 560`, en-dash ranges, comma-formatted totals, and malformed ranges: PASS.
-- v0.2.2 version labels updated in package metadata, worker fallback version, navigation UI, schema message, doctor, README, and VERSION.
-- Database schema remains version 2; v0.2.2 adds no migration.
+- v0.2.3 version labels updated in package metadata, worker fallback version, navigation UI, schema message, doctor, README, and VERSION.
+- Database schema remains version 2; v0.2.3 adds no migration.
+- Static source inspection confirms first-page extraction occurs before `probe.settle()`.
+- Static source inspection confirms `NetworkProbe.settle()` is timeout-bounded and response-body reads use a 1.2 s timeout.
+- Static source inspection confirms network-feed replay has an 8 s overall budget and bounded per-request timeout.
 
-The v0.2.2 change is concentrated in product discovery. The v0.2.0/v0.2.1 detail scraper, quality, comparison, database, and export engines are otherwise retained. Static packaging checks cannot prove that Emerson's live paginator or internal XHR shape will remain unchanged; the TM5 560-product run is the required integration test.
+The v0.2.3 change is concentrated in product discovery. The v0.2.0/v0.2.1 detail scraper, quality, comparison, database, and export engines are otherwise retained. Static packaging checks cannot prove that Emerson's live paginator or internal XHR shape will remain unchanged; the TM5 560-product run is the required integration test.
 
 ## Not possible in this Linux packaging environment
 
@@ -34,9 +37,9 @@ A full production validation requires Windows because the application intentiona
 15. If upgrading from v0.1, confirm the existing v0.2 migration path still preserves history.
 16. Run `build-installer.bat` and test the installer on a second Windows 10/11 x64 machine without Node/npm installed.
 
-## v0.2.2 pagination regression focus
+## v0.2.3 discovery regression focus
 
-The hotfix should be considered successful when TM5 reaches 560 unique products, either through a detected network feed or verified browser pagination:
+The hotfix should first be considered successful when TM5 no longer remains at 0% after `Discovering products...`: page 1 should be committed promptly, then discovery should reach 560 unique products through a detected network feed or verified browser pagination:
 
 ```text
 Page 1/56     10 / 560

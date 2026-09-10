@@ -230,25 +230,34 @@ class NetworkProbe {
     const resourceType = request.resourceType()
     if (!['xhr', 'fetch'].includes(resourceType)) return
 
+    // Record request metadata immediately. Diagnostics and normal discovery must
+    // never wait for a response body just to know that an XHR/fetch occurred.
+    const responseHeaders = response.headers()
+    const contentType = responseHeaders['content-type'] || ''
+    const record: RequestTrace = {
+      method: request.method(),
+      url: request.url(),
+      resourceType,
+      postData: request.postData(),
+      headers: request.headers(),
+      status: response.status(),
+      contentType
+    }
+    this.records.push(record)
+    if (this.records.length > 200) this.records.splice(0, this.records.length - 200)
+
+    // Only inspect bodies that are useful for product-feed discovery. Streaming
+    // and unrelated telemetry responses are deliberately ignored.
+    if (/text\/event-stream/i.test(contentType)) return
+    const likelyCatalog = /json/i.test(contentType) || /product|catalog|search|result|sku|graphql|api/i.test(request.url())
+    if (!likelyCatalog || !/json|text|javascript|html/i.test(contentType)) return
+
     const task = (async () => {
-      const headers = await request.allHeaders().catch(() => ({} as Record<string, string>))
-      const responseHeaders = await response.allHeaders().catch(() => ({} as Record<string, string>))
-      const contentType = responseHeaders['content-type'] || ''
-      const record: RequestTrace = {
-        method: request.method(),
-        url: request.url(),
-        resourceType,
-        postData: request.postData(),
-        headers,
-        status: response.status(),
-        contentType
-      }
-      if (/json|text|javascript|html/i.test(contentType)) {
-        record.responseText = await response.text().catch(() => undefined)
-        if (record.responseText && record.responseText.length > 3_000_000) record.responseText = record.responseText.slice(0, 3_000_000)
-      }
-      this.records.push(record)
-      if (this.records.length > 200) this.records.splice(0, this.records.length - 200)
+      const body = await Promise.race<string | undefined>([
+        response.text().then((text) => text).catch(() => undefined),
+        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 1200))
+      ])
+      if (body) record.responseText = body.length > 1_500_000 ? body.slice(0, 1_500_000) : body
     })()
 
     this.pending.add(task)
@@ -257,10 +266,21 @@ class NetworkProbe {
 
   mark(): number { return this.records.length }
 
-  async settle(): Promise<void> {
-    if (this.pending.size) await Promise.allSettled(Array.from(this.pending))
+  /**
+   * Give useful response bodies a short chance to finish, but never block normal
+   * product discovery on diagnostics/network-feed probing.
+   */
+  async settle(timeoutMs = 750): Promise<void> {
+    const tasks = Array.from(this.pending)
+    if (!tasks.length || timeoutMs <= 0) return
+    await Promise.race([
+      Promise.allSettled(tasks).then(() => undefined),
+      new Promise<void>((resolve) => setTimeout(resolve, timeoutMs))
+    ])
   }
 
+  pendingCount(): number { return this.pending.size }
+  readyBodyCount(): number { return this.records.filter((item) => Boolean(item.responseText)).length }
   since(mark: number): RequestTrace[] { return this.records.slice(mark) }
   all(): RequestTrace[] { return [...this.records] }
 
@@ -417,8 +437,10 @@ async function tryNetworkFeedPage(
   expectedTotal: number | null,
   sourceUrl: string,
   desiredPage: number,
-  pageSize: number
+  pageSize: number,
+  budgetMs = 8000
 ): Promise<{ products: ProductSeed[]; description: string } | null> {
+  const deadline = Date.now() + Math.max(1000, budgetMs)
   const ranked = records
     .map((record) => ({ record, score: pageFeedScore(record, anchorSkus, expectedTotal) }))
     .filter((item) => item.score >= Math.min(15, Math.max(7, anchorSkus.length * 2)))
@@ -434,6 +456,8 @@ async function tryNetworkFeedPage(
 
     const dedupe = new Set<string>()
     for (const variant of variants) {
+      const remainingMs = deadline - Date.now()
+      if (remainingMs <= 250) return null
       const key = `${variant.url}\n${variant.data || ''}`
       if (dedupe.has(key)) continue
       dedupe.add(key)
@@ -442,7 +466,7 @@ async function tryNetworkFeedPage(
           method: record.method,
           headers: sanitizeReplayHeaders(record.headers),
           data: variant.data,
-          timeout: 12000,
+          timeout: Math.max(500, Math.min(4000, remainingMs)),
           failOnStatusCode: false
         })
         if (!response.ok()) continue
@@ -657,7 +681,7 @@ async function advanceToNextPage(page: Page, desiredPage: number, probe: Network
     }
   }
 
-  // Most important v0.2.2 change: use Playwright's global text engine (including
+  // Retained v0.2.2 paginator change: use Playwright's global text engine (including
   // open shadow roots and iframes) instead of requiring paginator-like markup.
   if (await tryGlobalExactPageNumber(page, desiredPage, before, attempts)) {
     await probe.settle()
@@ -714,8 +738,10 @@ export async function discoverProducts(
 
   try {
     await gotoStable(page, sourceUrl)
-    await probe.settle()
+    onDiagnostic?.('[diag] discovery stage: series page loaded; extracting the first product page before optional network inspection.')
 
+    // v0.2.3: first-page DOM discovery is the critical path. Do not wait for
+    // diagnostics/XHR response bodies before committing the first products.
     let initialProducts = await extractCurrentPageProducts(page)
     if (initialProducts.length === 0) {
       const productControls = [
@@ -747,6 +773,11 @@ export async function discoverProducts(
     lastDetectedPage = pageNumberForRange(initialRange) ?? await currentPageNumber(page)
 
     if (expectedTotal != null && all.size >= expectedTotal) return Array.from(all.values())
+
+    // Give likely catalog responses a bounded opportunity to finish only after
+    // the first page has been persisted and progress has reached the renderer.
+    await probe.settle(1200)
+    onDiagnostic?.(`[diag] network probe after page 1: records=${probe.all().length}, bodies=${probe.readyBodyCount()}, pending=${probe.pendingCount()}.`)
 
     // API/XHR-first fallback. The page-load response that contains first-page SKUs
     // is replayed with common page/offset parameters. If successful, DOM pagination
@@ -822,7 +853,7 @@ export async function discoverProducts(
         `Current range: ${rangeText}; current page: ${pageText}. ` +
         `Pagination attempts: ${attemptText}. ` +
         `Network: ${networkText}. ` +
-        'v0.2.2 rejected every click that failed to change the result range/page/SKU grid.'
+        'v0.2.3 keeps network diagnostics bounded and rejected every click that failed to change the result range/page/SKU grid.'
       )
     }
     return Array.from(all.values())

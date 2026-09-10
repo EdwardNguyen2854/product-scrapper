@@ -1,8 +1,16 @@
-# AVENTICS Product Scraper v0.2.2
+# AVENTICS Product Scraper v0.2.3
 
 Windows desktop catalog-data tool for AVENTICS / Emerson product series. Paste one or more series URLs, scrape product specifications and asset links, validate data completeness, compare with previous runs, browse results, and export Excel / CSV / JSON.
 
-## Highlights in v0.2.2
+## Highlights in v0.2.3
+
+- **Non-blocking discovery hotfix:** first-page products are extracted and persisted before optional XHR/fetch diagnostics are allowed to settle.
+- Network-probe settling is now time-bounded; a long-lived or streaming request cannot hold discovery at 0%.
+- XHR/fetch metadata is recorded immediately while response-body capture is limited to likely catalog/JSON responses.
+- Response-body reads have a hard timeout and ignore `text/event-stream` traffic.
+- Experimental network-feed replay has an overall time budget and short per-request timeout so it remains an optimization, never a blocker.
+- Developer diagnostics report probe record/body/pending counts after page 1.
+- Existing v0.2.2 verified paginator logic is retained after the non-blocking network probe.
 
 - **Pagination hotfix v2:** the visible result range is the source of truth for the active page (`1-10` = page 1, `11-20` = page 2).
 - Product discovery now tries Playwright's global exact-text locator for the target page number across the main page, open shadow DOM, and frames; it no longer requires Emerson's paginator to use normal link/button markup.
@@ -119,7 +127,7 @@ The app intentionally does not attempt to bypass authentication, CAPTCHA, access
 
 ## Database and migration
 
-The application uses a per-user SQLite database under Electron's `userData` directory. v0.2.2 continues to use schema version 2; no database migration is required from v0.2.0. When an existing v0.1 database is detected, the app attempts to checkpoint and copy a backup before adding the v0.2 tables/columns.
+The application uses a per-user SQLite database under Electron's `userData` directory. v0.2.3 continues to use schema version 2; no database migration is required from v0.2.0. When an existing v0.1 database is detected, the app attempts to checkpoint and copy a backup before adding the v0.2 tables/columns.
 
 Existing v0.1 jobs remain visible. Old jobs naturally show `not_evaluated` quality and `not_compared` change state until they are re-scraped.
 
@@ -128,7 +136,7 @@ Existing v0.1 jobs remain visible. Old jobs naturally show `not_evaluated` quali
 - SKU is the primary product identity.
 - Added/removed products are determined from the discovered SKU inventories, not successful detail-scrape counts.
 - A failed current detail scrape is **not** treated as a removed product.
-- Field comparisons normalize whitespace only; v0.2.2 does not perform semantic unit conversion.
+- Field comparisons normalize whitespace only; v0.2.3 does not perform semantic unit conversion.
 - Assets are compared by type/category/title and URL.
 
 ## Exports
@@ -179,6 +187,7 @@ src/
 └─ shared/               shared TypeScript contracts and schemas
 ```
 
+
 ## Corporate proxy / Electron binary download
 
 Electron's npm package downloads its Windows runtime separately. If installation succeeds but `node_modules\electron\path.txt` is missing, and your environment uses `HTTP_PROXY` / `HTTPS_PROXY`, enable proxy support for Electron's downloader before reinstalling:
@@ -202,7 +211,7 @@ Avoid `npm audit fix --force` during normal setup because it may introduce break
 ## Known limitations
 
 - Emerson can change its DOM, pagination, or download-link structure at any time.
-- v0.2.2 extracts CAD links but does not bulk-download CAD files.
+- v0.2.3 extracts CAD links but does not bulk-download CAD files.
 - It does not schedule background runs or monitor catalog changes automatically.
 - Batch series are processed sequentially; product requests inside each series are concurrent.
 - Asset detection is intentionally conservative and may require parser updates for newly introduced Emerson components.

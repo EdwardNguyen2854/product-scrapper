@@ -1,4 +1,19 @@
-# v0.2.2 Implementation Notes
+# v0.2.3 Implementation Notes
+
+## v0.2.3 non-blocking network-probe hotfix
+
+The observed v0.2.2 failure was different from the earlier paginator issue: after logging `Discovering products...`, TM5 stayed at 0% with no error. The cause was `NetworkProbe.settle()` waiting for every pending XHR/fetch body before the first product page was extracted. A long-lived or delayed response could therefore block the critical path indefinitely.
+
+v0.2.3 changes the ordering and timeout rules:
+
+1. Load the series page.
+2. Extract the first visible product page immediately.
+3. Persist/emit those products so the renderer can show `10 / 560`.
+4. Give likely product-feed bodies only a bounded 1.2 s settle window.
+5. Attempt network-feed replay within an 8 s total budget.
+6. Fall back to the verified browser paginator regardless of unfinished diagnostic traffic.
+
+Request metadata is stored as soon as a response event arrives. Body reads are only attempted for likely catalog/JSON responses, are capped at 1.5 MB, time out after 1.2 s, and ignore `text/event-stream`. Network/API discovery is explicitly an optimization and diagnostic aid; it cannot block normal DOM discovery.
 
 ## v0.2.2 pagination hotfix
 

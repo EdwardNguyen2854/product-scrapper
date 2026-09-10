@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.3
+
+- Fixed v0.2.2 discovery hanging at 0% while waiting for captured XHR/fetch response bodies.
+- First-page product extraction/persistence now happens before optional network-probe settling, so the UI can report the first 10 products immediately.
+- Network-probe `settle()` is bounded and can no longer wait indefinitely for long-lived responses.
+- XHR/fetch request metadata is recorded immediately; body capture is restricted to likely catalog/JSON responses.
+- Added a 1.2 s response-body read timeout and excluded `text/event-stream` responses.
+- Added an 8 s overall budget and <=4 s request timeout for experimental network-feed replay.
+- Developer diagnostics now report network record/body/pending counts after page 1.
+- Retained the v0.2.2 verified browser-pagination fallbacks and database schema v2.
+
 ## 0.2.2
 
 - Reworked Emerson pagination after v0.2.1 could still click an icon without advancing the product grid.

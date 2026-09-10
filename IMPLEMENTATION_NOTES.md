@@ -1,4 +1,17 @@
-# v0.2.3 Implementation Notes
+# v0.2.4 Implementation Notes
+
+## v0.2.4 cookie + queue runtime hotfix
+
+The TM5 run proved that product discovery itself is now correct: after the cookie prompt was manually closed and page 2 was selected, the scraper automatically traversed pages 2–56 and discovered all 560 unique products. The job then failed at the transition to detail scraping with `PQueue is not a constructor`.
+
+v0.2.4 fixes both blockers without changing the database schema:
+
+1. `gotoStable()` now polls for delayed cookie/consent UI, supports OneTrust close/accept controls and common consent wording, uses guarded force-click fallback, and verifies the known OneTrust overlay is hidden.
+2. `electron.vite.config.ts` excludes `p-queue` from dependency externalization, which lets Vite/Rollup normalize the CommonJS default export used by `new PQueue(...)`.
+3. Worker and browser-fallback queues keep the existing `PQueue` API; only bundling/externalization behavior changes.
+4. The change is build-level and leaves queue behavior/concurrency semantics unchanged.
+
+The verified v0.2.3 pagination and non-blocking network-probe behavior are retained.
 
 ## v0.2.3 non-blocking network-probe hotfix
 

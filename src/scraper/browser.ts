@@ -99,6 +99,13 @@ async function waitForOneTrustHidden(page: Page): Promise<void> {
  * DOMContentLoaded, so callers may give this helper a short polling window.
  */
 export async function dismissCookieBanner(page: Page, waitMs = 0): Promise<boolean> {
+  // Once OneTrust has stored a choice, do not spend the polling budget on every
+  // product-detail page in the shared browser context.
+  if (waitMs > 0) {
+    const cookies = await page.context().cookies().catch(() => [])
+    if (cookies.some((cookie) => /^(?:OptanonConsent|OptanonAlertBoxClosed)$/i.test(cookie.name))) return false
+  }
+
   const deadline = Date.now() + Math.max(0, waitMs)
   do {
     for (const frame of page.frames()) {

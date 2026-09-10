@@ -6,7 +6,7 @@
 - Node syntax check for `scripts/doctor.mjs` and `scripts/ensure-electron.mjs`: PASS.
 - TypeScript/TSX syntax transpilation across source and tests: PASS (34 source/test files checked, excluding `.d.ts`).
 - Product-range helper smoke checks for `1 - 10 of 560`, en-dash ranges, comma-formatted totals, and malformed ranges: PASS.
-- v0.2.4 version labels updated in package metadata, worker fallback version, navigation UI, schema message, doctor, README, and VERSION.
+- v0.2.4 version labels updated in package metadata, navigation UI, schema message, doctor, README, and VERSION.
 - Database schema remains version 2; v0.2.4 adds no migration.
 - Static source inspection confirms first-page extraction occurs before `probe.settle()`.
 - Static source inspection confirms `NetworkProbe.settle()` is timeout-bounded and response-body reads use a 1.2 s timeout.

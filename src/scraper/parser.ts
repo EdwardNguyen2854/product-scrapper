@@ -1,5 +1,6 @@
 import * as cheerio from 'cheerio'
 import type { AssetCategory, AssetRecord, AssetType, SourceMethod } from '../shared/types'
+import { normalizeAventicsSku, skuFromLabeledText, skuFromProductUrl } from './sku'
 
 export type ParsedAsset = Omit<AssetRecord, 'id' | 'productId' | 'detectedAt'>
 
@@ -14,10 +15,7 @@ export interface ParsedProductPage {
 const clean = (value: string): string => value.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim()
 
 function inferSku(url: string, text = ''): string {
-  const fromUrl = url.match(/aventics-sku-([^/?#]+)/i)?.[1]
-  if (fromUrl) return decodeURIComponent(fromUrl).toUpperCase()
-  const match = text.match(/\b(?:R\d{8,}|\d{10})\b/i)
-  return match?.[0]?.toUpperCase() ?? ''
+  return skuFromProductUrl(url) || skuFromLabeledText(text)
 }
 
 function addPair(target: Record<string, string>, keyRaw: string, valueRaw: string): void {
@@ -148,7 +146,7 @@ function collectAssets($: cheerio.CheerioAPI, baseUrl: string, sku: string): Par
 export function parseProductHtml(html: string, url: string, skuHint = ''): ParsedProductPage {
   const $ = cheerio.load(html)
   const pageText = clean($.root().text())
-  let sku = skuHint || inferSku(url, pageText)
+  let sku = normalizeAventicsSku(skuHint) || inferSku(url, pageText)
   let name = clean($('h1').first().text())
   let description = ''
   const specifications: Record<string, string> = {}
@@ -165,7 +163,7 @@ export function parseProductHtml(html: string, url: string, skuHint = ''): Parse
           if (!/Product/i.test(type)) continue
           if (!name && candidate.name) name = clean(String(candidate.name))
           if (!description && candidate.description) description = clean(String(candidate.description))
-          if (!sku && candidate.sku) sku = clean(String(candidate.sku)).replace(/^AVENTICS-/i, '').toUpperCase()
+          if (!sku && candidate.sku) sku = normalizeAventicsSku(clean(String(candidate.sku)))
         }
       }
     } catch {
@@ -184,8 +182,8 @@ export function parseProductHtml(html: string, url: string, skuHint = ''): Parse
     if (match) description = clean(match[1])
   }
 
-  const partNumber = pageText.match(/Part Number\s*:?\s*(AVENTICS-[A-Z0-9_-]+|R\d{8,}|\d{10})/i)?.[1]
-  if (partNumber) addPair(specifications, 'Part Number', partNumber)
+  const partNumber = pageText.match(/Part Number\s*:?\s*((?:AVENTICS-)?[A-Z0-9][A-Z0-9._-]{4,39})/i)?.[1]
+  if (partNumber && normalizeAventicsSku(partNumber)) addPair(specifications, 'Part Number', partNumber)
   const price = pageText.match(/(?:US\$|USD\s*|\$)\s*[\d,]+(?:\.\d{2})?/)?.[0]
   if (price) addPair(specifications, 'Price', price)
 
@@ -227,13 +225,15 @@ export function parseProductHtml(html: string, url: string, skuHint = ''): Parse
 
   name = clean(name)
   description = clean(description)
-  sku = (sku || inferSku(url, `${name} ${pageText}`)).replace(/^AVENTICS-/i, '').toUpperCase()
+  sku = normalizeAventicsSku(sku || inferSku(url, `${name} ${pageText}`))
   const assets = collectAssets($, url, sku)
   return { sku, name, description, specifications, assets }
 }
 
 export function isUsefulProduct(data: ParsedProductPage, expectedSku?: string): boolean {
   if (!data.sku || !data.name) return false
-  if (expectedSku && data.sku.replace(/^AVENTICS-/i, '').toUpperCase() !== expectedSku.toUpperCase()) return false
+  const actual = normalizeAventicsSku(data.sku)
+  const expected = normalizeAventicsSku(expectedSku)
+  if (expected && actual !== expected) return false
   return Object.keys(data.specifications).length > 0
 }

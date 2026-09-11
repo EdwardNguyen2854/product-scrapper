@@ -1,6 +1,6 @@
 {
   "name": "aventics-product-scraper",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Desktop AVENTICS catalog data tool with batch scraping, asset extraction, data quality, historical comparison, product browser, and Excel/CSV/JSON export.",
   "main": "./out/main/index.js",
   "author": "Internal Engineering Tool",

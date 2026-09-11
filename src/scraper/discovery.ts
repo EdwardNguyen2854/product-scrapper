@@ -2,6 +2,7 @@ import type { Frame, Locator, Page, Response } from 'playwright-core'
 import type { AnalysisResult, ProductSeed } from '../shared/types'
 import { BrowserSession, gotoStable } from './browser'
 import { JobController } from './control'
+import { normalizeAventicsSku, skuFromProductUrl } from './sku'
 
 const normalizeText = (value: string): string => value.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim()
 
@@ -82,25 +83,42 @@ async function extractCurrentPageProducts(page: Page): Promise<PageProduct[]> {
   return page.evaluate(() => {
     const clean = (value: string | null | undefined) => (value || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim()
     const absolute = (href: string) => new URL(href, location.href).toString()
-    const skuRegex = /\b(?:R\d{8,}|\d{10})\b/i
+    const normalizeSku = (raw: string | null | undefined) => {
+      if (!raw) return ''
+      let value = raw.trim()
+      try { value = decodeURIComponent(value) } catch { /* keep raw text */ }
+      value = value.replace(/^AVENTICS-/i, '').trim().toUpperCase()
+      if (!/^[A-Z0-9][A-Z0-9._-]{4,39}$/.test(value)) return ''
+      if (!/\d/.test(value)) return ''
+      if (/^\d+$/.test(value) && value.length < 8) return ''
+      return value
+    }
+    const skuFromHref = (href: string) => normalizeSku(href.match(/aventics-sku-([^/?#]+)/i)?.[1])
+    const skuFromText = (text: string) => {
+      const labeled = text.match(/(?:part\s*number|sku|catalog\s*number|material\s*number|product\s*number)\s*:?\s*((?:AVENTICS-)?[A-Z0-9][A-Z0-9._-]{4,39})/i)?.[1]
+      return normalizeSku(labeled) || normalizeSku(text.match(/\b(?:R\d{8,}|\d{10})\b/i)?.[0])
+    }
     const results = new Map<string, PageProduct>()
 
     const anchors = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]'))
     for (const anchor of anchors) {
       const href = anchor.getAttribute('href') || ''
-      if (!href.includes('/product/')) continue
+      if (!/\/product\//i.test(href)) continue
 
-      const slugSku = href.match(/aventics-sku-([^/?#]+)/i)?.[1]
-      const textSku = clean(anchor.textContent).match(skuRegex)?.[0]
-      const sku = decodeURIComponent(slugSku || textSku || '').toUpperCase()
-      if (!sku || !skuRegex.test(sku)) continue
+      // The canonical /aventics-sku-<id> product URL is the primary identity
+      // source. Do not assume the SKU itself follows the legacy R/10-digit form.
+      const sku = skuFromHref(href) || skuFromText(clean(anchor.textContent))
+      if (!sku) continue
 
       let container: Element | null = anchor
       for (let i = 0; i < 8 && container?.parentElement; i += 1) {
         const parent = container.parentElement
         const parentText = clean(parent.textContent)
-        const distinctSkus = new Set((parentText.match(/\b(?:R\d{8,}|\d{10})\b/gi) || []).map((value) => value.toUpperCase()))
-        if (parentText.includes(sku) && parentText.length > 25 && distinctSkus.size <= 1) container = parent
+        const linkedSkus = Array.from(parent.querySelectorAll<HTMLAnchorElement>('a[href*="aventics-sku-"]'))
+          .map((link) => skuFromHref(link.getAttribute('href') || ''))
+          .filter(Boolean)
+        const distinctSkus = new Set(linkedSkus)
+        if (parentText.length > 25 && distinctSkus.size <= 1) container = parent
         else break
       }
 
@@ -131,6 +149,17 @@ async function extractCurrentPageProducts(page: Page): Promise<PageProduct[]> {
     }
     return Array.from(results.values())
   })
+}
+
+
+async function productLinkDiagnostics(page: Page): Promise<string> {
+  return page.evaluate(() => {
+    const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]'))
+    const productLinks = links.filter((a) => /\/product\//i.test(a.getAttribute('href') || ''))
+    const skuLinks = productLinks.filter((a) => /aventics-sku-/i.test(a.getAttribute('href') || ''))
+    const samples = skuLinks.slice(0, 5).map((a) => a.getAttribute('href') || '').filter(Boolean)
+    return `product-links=${productLinks.length}, aventics-sku-links=${skuLinks.length}${samples.length ? `, samples=${samples.join(' | ')}` : ''}`
+  }).catch(() => 'product-link diagnostics unavailable')
 }
 
 async function readProductRange(page: Page): Promise<ProductRange | null> {
@@ -306,7 +335,7 @@ function sanitizeReplayHeaders(headers: Record<string, string>): Record<string, 
   return Object.fromEntries(Object.entries(headers).filter(([key]) => !blocked.has(key.toLowerCase())))
 }
 
-function extractSeedsFromPayload(text: string, sourceUrl: string): ProductSeed[] {
+export function extractSeedsFromPayload(text: string, sourceUrl: string): ProductSeed[] {
   const urlRegex = /(?:https?:\\?\/\\?\/[^"'\s<>]*\/product\/aventics-sku-[^"'\s<>\\?#]+|\/product\/aventics-sku-[^"'\s<>\\?#]+)/gi
   const urls = (text.match(urlRegex) || []).map((raw) => raw.replace(/\\\//g, '/'))
   const bySku = new Map<string, string>()
@@ -315,19 +344,30 @@ function extractSeedsFromPayload(text: string, sourceUrl: string): ProductSeed[]
   for (const raw of urls) {
     const slug = raw.match(/aventics-sku-([^/?#"']+)/i)?.[1]
     if (!slug) continue
-    const sku = decodeURIComponent(slug).toUpperCase()
-    if (!/^(?:R\d{8,}|\d{10})$/i.test(sku)) continue
+    const sku = normalizeAventicsSku(slug)
+    if (!sku) continue
     skuValues.add(sku)
     bySku.set(sku, new URL(raw, sourceUrl).toString())
   }
 
-  // R-prefixed AVENTICS identifiers are distinctive enough to accept directly.
-  for (const sku of text.match(/\bR\d{8,}\b/gi) || []) skuValues.add(sku.toUpperCase())
+  // R-prefixed identifiers remain a useful unlabelled fallback.
+  for (const rawSku of text.match(/\bR\d{8,}\b/gi) || []) {
+    const sku = normalizeAventicsSku(rawSku)
+    if (sku) skuValues.add(sku)
+  }
 
-  // Pure 10-digit identifiers are accepted only when they are attached to a
-  // product/SKU-like JSON key; arbitrary timestamps/IDs are not treated as SKUs.
-  const tagged = /["'](?:sku|partNumber|part_number|catalogNumber|catalog_number|productNumber|product_number|materialNumber|material_number)["']\s*:\s*["']?(\d{10})["']?/gi
-  for (const match of text.matchAll(tagged)) skuValues.add(match[1].toUpperCase())
+  // Accept mixed alphanumeric identifiers when a product/SKU-like JSON key
+  // explicitly labels the value. This covers G617..., SH..., G651..., etc.
+  const taggedQuoted = /["'](?:sku|partNumber|part_number|catalogNumber|catalog_number|productNumber|product_number|materialNumber|material_number)["']\s*:\s*["']((?:AVENTICS-)?[A-Za-z0-9][A-Za-z0-9._-]{4,39})["']/gi
+  for (const match of text.matchAll(taggedQuoted)) {
+    const sku = normalizeAventicsSku(match[1])
+    if (sku) skuValues.add(sku)
+  }
+  const taggedNumeric = /["'](?:sku|partNumber|part_number|catalogNumber|catalog_number|productNumber|product_number|materialNumber|material_number)["']\s*:\s*(\d{8,20})(?=\s*[,}])/gi
+  for (const match of text.matchAll(taggedNumeric)) {
+    const sku = normalizeAventicsSku(match[1])
+    if (sku) skuValues.add(sku)
+  }
 
   const seeds: ProductSeed[] = []
   for (const sku of skuValues) {
@@ -761,7 +801,10 @@ export async function discoverProducts(
       }
     }
 
-    if (!initialProducts.length) return []
+    if (!initialProducts.length) {
+      onDiagnostic?.(`[diag] zero-product discovery diagnostics: ${await productLinkDiagnostics(page)}`)
+      return []
+    }
 
     const initialRange = await readProductRange(page)
     const pageSize = initialRange ? Math.max(1, initialRange.end - initialRange.start + 1) : Math.max(1, initialProducts.length)
@@ -853,7 +896,7 @@ export async function discoverProducts(
         `Current range: ${rangeText}; current page: ${pageText}. ` +
         `Pagination attempts: ${attemptText}. ` +
         `Network: ${networkText}. ` +
-        'v0.2.3 keeps network diagnostics bounded and rejected every click that failed to change the result range/page/SKU grid.'
+        'v0.2.6 keeps network diagnostics bounded and rejected every click that failed to change the result range/page/SKU grid.'
       )
     }
     return Array.from(all.values())

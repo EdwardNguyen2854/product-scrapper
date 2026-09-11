@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pageCountForRange, pageNumberForRange, parseProductRangeText } from '../src/scraper/discovery'
+import { extractSeedsFromPayload, pageCountForRange, pageNumberForRange, parseProductRangeText } from '../src/scraper/discovery'
 
 describe('product pagination helpers', () => {
   it('parses the Emerson product result range', () => {
@@ -27,5 +27,26 @@ describe('product pagination helpers', () => {
     expect(pageNumberForRange({ start: 11, end: 20, total: 560 })).toBe(2)
     expect(pageNumberForRange({ start: 551, end: 560, total: 560 })).toBe(56)
     expect(pageNumberForRange(null)).toBeNull()
+  })
+})
+
+
+describe('product feed SKU extraction', () => {
+  it('accepts mixed alphanumeric SKUs from canonical product URLs', () => {
+    const payload = JSON.stringify({
+      items: [
+        { url: '/product/aventics-sku-g617a40010a0006' },
+        { url: '/product/aventics-sku-sh03101lb16ds4' },
+        { url: '/product/aventics-sku-g651a5s610a00fh' }
+      ]
+    })
+    expect(extractSeedsFromPayload(payload, 'https://discreteautomation.emerson.com/product/aventics-617').map((p) => p.sku).sort()).toEqual([
+      'G617A40010A0006', 'G651A5S610A00FH', 'SH03101LB16DS4'
+    ].sort())
+  })
+
+  it('accepts a mixed SKU from an explicitly tagged JSON field', () => {
+    const payload = '{"partNumber":"G617A42211A0010","name":"617 valve"}'
+    expect(extractSeedsFromPayload(payload, 'https://discreteautomation.emerson.com/product/aventics-617').map((p) => p.sku)).toContain('G617A42211A0010')
   })
 })

@@ -33,7 +33,7 @@ describe('exportJobToExcel',()=>{
   it('exports a listing-only job without crashing in AutoFilter setup',async()=>{
     const dir=await mkdtemp(join(tmpdir(),'aventics-xlsx-'))
     try {
-      const path=await exportJobToExcel(detail(),dir,'0.2.5')
+      const path=await exportJobToExcel(detail(),dir,'0.2.6')
       const bytes=await readFile(path)
       expect(bytes.length).toBeGreaterThan(1000)
     } finally {

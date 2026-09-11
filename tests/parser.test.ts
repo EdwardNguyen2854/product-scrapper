@@ -22,3 +22,17 @@ describe('parseProductHtml', () => {
     expect(isUsefulProduct(parsed, 'R480698486')).toBe(true)
   })
 })
+
+describe('mixed alphanumeric SKU parsing', () => {
+  it.each([
+    'G617A40010A0006',
+    'SH03101LB16DS4',
+    'G651A5S610A00FH'
+  ])('keeps %s from the canonical product URL', (sku) => {
+    const html = `<!doctype html><html><head><title>AVENTICS test</title></head><body><h1>AVENTICS test ${sku}</h1><div>Part Number: ${sku}</div><table><tr><th>Pressure</th><td>10 bar</td></tr></table></body></html>`
+    const parsed = parseProductHtml(html, `https://discreteautomation.emerson.com/product/aventics-sku-${sku.toLowerCase()}`)
+    expect(parsed.sku).toBe(sku)
+    expect(parsed.specifications['Part Number']).toBe(sku)
+    expect(isUsefulProduct(parsed, sku)).toBe(true)
+  })
+})

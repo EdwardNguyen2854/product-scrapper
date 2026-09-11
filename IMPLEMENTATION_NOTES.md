@@ -1,5 +1,20 @@
-# v0.2.5 Implementation Notes
+# v0.2.6 Implementation Notes
 
+
+## v0.2.6 generic SKU discovery hotfix
+
+Series 617 exposed a hidden assumption in the original TaskMaster-focused discovery code. Product cards were accepted only when the SKU matched `R\d{8,}` or a 10-digit numeric identifier. Emerson also uses mixed alphanumeric identifiers, so valid Series 617/SH/651 product links were being rejected even though the series page loaded correctly.
+
+v0.2.6 changes product identity rules as follows:
+
+1. A canonical `.../product/aventics-sku-<id>` href is the strongest SKU source and the slug is accepted after conservative normalization.
+2. Valid identifiers may contain letters, digits, `.`, `_` and `-`, must contain at least one digit, and are bounded to a practical catalog length. This keeps discovery format-agnostic without accepting arbitrary prose.
+3. Product-card boundary detection inspects descendant canonical SKU links instead of searching parent text for only R/numeric SKUs.
+4. Network/XHR payload discovery accepts canonical product links and explicitly labeled `sku`, `partNumber`, `catalogNumber`, `productNumber`, and `materialNumber` values in mixed alphanumeric form.
+5. Detail-page parsing uses the same normalization for URL slugs, JSON-LD SKU values and Part Number labels.
+6. If first-page discovery still returns zero, Developer diagnostics report total product links, canonical SKU-link count and sample hrefs to make the next markup change observable.
+
+Regression examples include `R480698477`, `0821000002`, `G617A40010A0006`, `SH03101LB16DS4`, and `G651A5S610A00FH`. The v0.2.5 export/mode fixes and v0.2.4 cookie/queue fixes remain unchanged.
 
 ## v0.2.5 export + mode semantics hotfix
 

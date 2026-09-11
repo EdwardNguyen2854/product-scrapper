@@ -1,8 +1,14 @@
-# AVENTICS Product Scraper v0.2.5
+# AVENTICS Product Scraper v0.2.6
 
 Windows desktop catalog-data tool for AVENTICS / Emerson product series. Paste one or more series URLs, scrape product specifications and asset links, validate data completeness, compare with previous runs, browse results, and export Excel / CSV / JSON.
 
-## Highlights in v0.2.5
+## Highlights in v0.2.6
+
+
+- **Generic AVENTICS SKU discovery:** product identity now comes primarily from Emerson's canonical `/product/aventics-sku-<id>` URL instead of assuming only `R#########` or 10-digit SKUs.
+- Supports mixed alphanumeric families such as `G617A40010A0006`, `SH03101LB16DS4`, and `G651A5S610A00FH` while retaining legacy R-prefixed and numeric SKUs.
+- Network/feed discovery and product-detail parsing use the same format-agnostic SKU normalization rules.
+- Zero-product failures now include developer diagnostics with product-link counts and sample canonical SKU hrefs.
 
 - **Excel export hotfix:** valid header-only AutoFilter ranges prevent the ExcelJS `undefined.row` crash.
 - **Mode-aware quality:** listing-only jobs are not penalized for missing detail specifications.
@@ -136,7 +142,7 @@ The app intentionally does not attempt to bypass authentication, CAPTCHA, access
 
 ## Database and migration
 
-The application uses a per-user SQLite database under Electron's `userData` directory. v0.2.5 continues to use schema version 2; no database migration is required from v0.2.0. When an existing v0.1 database is detected, the app attempts to checkpoint and copy a backup before adding the v0.2 tables/columns.
+The application uses a per-user SQLite database under Electron's `userData` directory. v0.2.6 continues to use schema version 2; no database migration is required from v0.2.0. When an existing v0.1 database is detected, the app attempts to checkpoint and copy a backup before adding the v0.2 tables/columns.
 
 Existing v0.1 jobs remain visible. Old jobs naturally show `not_evaluated` quality and `not_compared` change state until they are re-scraped.
 
@@ -145,7 +151,7 @@ Existing v0.1 jobs remain visible. Old jobs naturally show `not_evaluated` quali
 - SKU is the primary product identity.
 - Added/removed products are determined from the discovered SKU inventories, not successful detail-scrape counts.
 - A failed current detail scrape is **not** treated as a removed product.
-- Field comparisons normalize whitespace only; v0.2.5 does not perform semantic unit conversion.
+- Field comparisons normalize whitespace only; v0.2.6 does not perform semantic unit conversion.
 - Assets are compared by type/category/title and URL.
 
 ## Exports
@@ -220,7 +226,7 @@ Avoid `npm audit fix --force` during normal setup because it may introduce break
 ## Known limitations
 
 - Emerson can change its DOM, pagination, or download-link structure at any time.
-- v0.2.5 extracts CAD links but does not bulk-download CAD files.
+- v0.2.6 extracts CAD links but does not bulk-download CAD files.
 - It does not schedule background runs or monitor catalog changes automatically.
 - Batch series are processed sequentially; product requests inside each series are concurrent.
 - Asset detection is intentionally conservative and may require parser updates for newly introduced Emerson components.

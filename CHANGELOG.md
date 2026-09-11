@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.6
+
+- Removed the legacy discovery assumption that AVENTICS SKUs must be `R` + digits or exactly 10 numeric digits.
+- Canonical Emerson `/product/aventics-sku-<id>` URLs are now the primary SKU identity source.
+- Added mixed alphanumeric SKU support for families such as Series 617 (`G617...`), SH (`SH...`) and Series 651 (`G651...`).
+- Broadened labeled JSON/network-feed SKU extraction and product-detail Part Number parsing to the same generic rules.
+- Product-card boundary detection now counts canonical `aventics-sku-*` links rather than scanning parent text with the old numeric regex.
+- Added zero-product developer diagnostics showing product-link counts and sample SKU hrefs.
+- Added regression tests for legacy, numeric and mixed alphanumeric SKU families plus network-payload extraction.
+- Database schema remains v2.
+
 ## 0.2.5
 
 - Fixed Excel export crash `Cannot read properties of undefined (reading 'row')` by using a valid header-row AutoFilter range instead of passing `Worksheet.dimensions` to ExcelJS.
